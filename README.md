@@ -4,6 +4,9 @@ lucimo の 2.4GHz リモコン照明（VENTOTA Minoi CGY、リモコン LUC-RC-0
 M5Atom Lite がリモコンの代わりに電波を出します。
 照明本体の改造や配線は要りません。
 
+VENTOTA 株式会社とは関係のない非公式のツールです。
+使用は自己責任でお願いします。
+
 リモコンの電波は暗号で保護されていて、命令を組み立てて送ることはできません。
 このリポジトリには、作者のリモコンから採取した電波（`frames.json`）が入っています。
 lucimo の照明は、ペアリングしたリモコンの電波を覚えて反応する仕組みです。
@@ -28,15 +31,24 @@ lucimo の照明は、ペアリングしたリモコンの電波を覚えて反�
 - PC（macOS で確認。Linux でもポート名を読み替えれば動くはずです）
 - [arduino-cli](https://arduino.github.io/arduino-cli/) とボード定義 `m5stack:esp32`
 - Arduino ライブラリ WiFiManager（tzapu）
-- Python 3
+- Python 3 と pyserial（`build.sh` が書き込み後にシリアルの常駐プロセスを起動するため）
 
 ```sh
+arduino-cli config add board_manager.additional_urls https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
+arduino-cli core update-index
 arduino-cli core install m5stack:esp32
 arduino-cli lib install WiFiManager
+pip3 install pyserial
 ```
 
-m5stack のボード定義は追加の URL が要ります。
-導入方法は M5Stack の公式ドキュメントを参照してください。
+次の版でビルドが通ることを確かめています（実機への書き込みは別の版で行っています）。
+
+| 対象 | 版 |
+|---|---|
+| m5stack:esp32 | 3.3.9 |
+| WiFiManager | 2.0.17 |
+| arduino:avr（受信機） | 1.8.8 |
+| RF24（受信機） | 1.6.2 |
 
 自分のリモコンの電波を採取する場合は、ほかに Arduino Uno と nRF24L01+ が要ります（「[自分のリモコンの電波を使うとき](#自分のリモコンの電波を使うとき)」を参照）。
 
@@ -120,12 +132,11 @@ ON と OFF を素早く繰り返すような使い方では、2回目以降が�
 
 同梱の電波ではなく、手元のリモコンの電波を使うこともできます。
 照明のペアリングを変えずに済むほか、同梱の電波でペアリングできなかったときの代わりの手段になります。
-採取には Arduino Uno、nRF24L01+、100µF のコンデンサ、RF24 ライブラリ（TMRh20）、pyserial を使います。
+採取には Arduino Uno、nRF24L01+、100µF のコンデンサ、RF24 ライブラリ（TMRh20）を使います。
 
 ```sh
 arduino-cli core install arduino:avr
 arduino-cli lib install RF24
-pip3 install pyserial
 ```
 
 ### 受信機を作る
@@ -229,3 +240,10 @@ python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
 
 電波の形式、暗号で保護されていることの確認、通し番号の受け付け条件などを調べた経緯は [research/README.md](research/README.md) にまとめています。
 実験の一部は再検証していないので、参考として読んでください。
+
+## ライセンス
+
+[MIT](LICENSE) です。
+
+受信機（`lucimo_sniff6`）が使う RF24 ライブラリは GPL-2.0 です。
+受信機をビルドしたバイナリを配る場合は、そのバイナリに GPL-2.0 の条件が適用されます。

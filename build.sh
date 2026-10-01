@@ -5,10 +5,12 @@ set -e
 cd "$(dirname "$0")"
 # M5Atom Lite のシリアルポート。環境に合わせて PORT=... ./build.sh で上書きする
 PORT="${PORT:-/dev/cu.usbserial-51522BCB3F}"
+# ボード ID（M5Stack のボード定義 3.3.9 で確認）。環境で ID が違う場合は FQBN=... で上書きする
+FQBN="${FQBN:-m5stack:esp32:m5stack_atom}"
 python3 genframes.py
 pgrep -f "daemon.py $PORT" | xargs -r kill || true
 sleep 1
-arduino-cli compile --fqbn m5stack:esp32:atom lucimo_server | tail -1
-arduino-cli upload -p "$PORT" --fqbn m5stack:esp32:atom lucimo_server | tail -1
+arduino-cli compile --fqbn "$FQBN" lucimo_server | tail -1
+arduino-cli upload -p "$PORT" --fqbn "$FQBN" lucimo_server | tail -1
 (cd esp && nohup python3 daemon.py "$PORT" >/dev/null 2>&1 &)
 sleep 13
