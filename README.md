@@ -41,14 +41,19 @@ arduino-cli lib install WiFiManager
 pip3 install pyserial
 ```
 
-次の版でビルドが通ることを確かめています（実機への書き込みは別の版で行っています）。
+次の版でビルド・書き込みを確かめています。
 
 | 対象 | 版 |
 |---|---|
-| m5stack:esp32 | 3.3.9 |
+| m5stack:esp32 | 2.0.8 |
 | WiFiManager | 2.0.17 |
 | arduino:avr（受信機） | 1.8.8 |
 | RF24（受信機） | 1.6.2 |
+
+`build.sh` の既定のボード ID は `m5stack:esp32:atom`（コア 2.0.x 向け）です。
+`arduino-cli core install` で入る新しいコア（3.x 以降）では ID が `m5stack:esp32:m5stack_atom` に変わっているので、
+その場合は `FQBN=m5stack:esp32:m5stack_atom ./build.sh` のように上書きしてください。
+`arduino-cli board listall m5stack` で手元の正しい ID を確認できます。
 
 自分のリモコンの電波を採取する場合は、ほかに Arduino Uno と nRF24L01+ が要ります（「[自分のリモコンの電波を使うとき](#自分のリモコンの電波を使うとき)」を参照）。
 
@@ -123,10 +128,41 @@ PORT=/dev/cu.usbserial-XXXXXXXXXX ./build.sh
 ON と OFF を素早く繰り返すような使い方では、2回目以降が弾かれることがあります。
 これを避けるには、全ボタンを決めた順に1周ずつ押したものを数周ぶん、押した順のまま `SEQ_ALL` に入れます。
 
-`SEQ_ALL` の形式は `[[ボタン名, フレーム], ...]` で、採取した順に並べます。
-途中でリモコンを押していない、ひと続きの採取から作る必要があります。
-今のところ、WATCH の出力からこの列を作るスクリプトはリポジトリにありません。
-採り方の詳細は[解析の記録](research/README.md)にあります。
+### SEQ_ALL を採る
+
+全ボタンを決めた順で1周、それを数周くりかえして採取し、`seqgen.py` で `SEQ_ALL` を作ります。
+通し番号が連続している必要があるので、**ひと続きの受信で**、周の区切りだけ少し長め（3秒ほど）に空けて押します。
+
+```sh
+python3 ard/send.py 'REINIT
+ADDR 01E10FCF62
+WATCH 240
+' 246 > /tmp/seq.txt
+```
+
+受信しているあいだに、次の21ボタンをこの順で1周、周の間を3秒ほど空けて、数周くりかえします。
+周の中は1秒おきくらいの一定のペースで押します。
+
+```
+ON OFF FAV1 FAV2 COLOR BRIGHTNESS BRIGHTER WHITE NIGHT WARM DIMMER
+TIMER30 TIMER60 G1_ON G2_ON G3_ON G4_ON G1_OFF G2_OFF G3_OFF G4_OFF
+```
+
+受信後、同じ順を渡して取り込みます。
+
+```sh
+python3 seqgen.py /tmp/seq.txt \
+  ON OFF FAV1 FAV2 COLOR BRIGHTNESS BRIGHTER WHITE NIGHT WARM DIMMER \
+  TIMER30 TIMER60 G1_ON G2_ON G3_ON G4_ON G1_OFF G2_OFF G3_OFF G4_OFF
+```
+
+`seqgen.py` は周の切れ目（2.5秒以上の間）で区切り、ちょうど21個そろった周だけを使います。
+通し番号が途切れないよう、連続してそろった周のまとまりを `SEQ_ALL` にします。
+採れた周が少なければ、そのぶん連打できる回数も減ります（数周あれば実用上は十分です）。
+取り込んだら「[M5Atom Lite に書き込む](#1-m5atom-lite-に書き込む)」の手順で書き込み直します。
+
+`SEQ_ALL` の形式は `[[ボタン名, フレーム], ...]` で、採取した順に並びます。
+採り方の背景は[解析の記録](research/README.md)にあります。
 
 ## 自分のリモコンの電波を使うとき
 
@@ -229,6 +265,7 @@ python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
 | `lucimo_sniff6/` | Arduino Uno + nRF24L01+ の受信機 |
 | `ard/`、`esp/` | 各ボードのシリアルを開きっぱなしにする常駐プロセスと、そこへコマンドを送るスクリプト |
 | `harvest.py` | 採取ログをボタンごとに振り分けて `frames.json` に取り込む |
+| `seqgen.py` | 全ボタン1周×数周の採取ログから連打用の列 `SEQ_ALL` を作る |
 | `genframes.py` | `frames.json` から `lucimo_server/frames.h` を作る（`build.sh` が呼ぶ） |
 | `lucimo.py` | フレームの CRC 検証と `frames.json` の読み書き。`python3 lucimo.py list` で登録内容を表示する |
 | `clone.py` | ホワイトニングの計算（`lucimo.py` と `genframes.py` が読み込む） |
