@@ -7,7 +7,7 @@ M5Atom Lite がリモコンの代わりに電波を出します。
 VENTOTA 株式会社とは関係のない非公式のツールです。
 使用は自己責任でお願いします。
 
-リモコンの電波は暗号で保護されていて、命令を組み立てて送ることはできません。
+リモコンの電波には署名が付与されていて、命令のバイト列を自分で組み立てて送っても照明は反応しません。
 このリポジトリには、作者のリモコンから採取した電波（`frames.json`）が入っています。
 lucimo の照明は、ペアリングしたリモコンの電波を覚えて反応する仕組みです。
 そのため、M5Atom Lite にこの電波を書き込み、照明をそれとペアリングすれば、手元のリモコンの電波を採取しなくても使えます。
@@ -31,12 +31,12 @@ lucimo の照明は、ペアリングしたリモコンの電波を覚えて反�
 - PC（macOS で確認。Linux でもポート名を読み替えれば動くはずです）
 - [arduino-cli](https://arduino.github.io/arduino-cli/) とボード定義 `m5stack:esp32`
 - Arduino ライブラリ WiFiManager（tzapu）
-- Python 3 と pyserial（`build.sh` が書き込み後にシリアルの常駐プロセスを起動するため）
+- Python 3 と pyserial（ボード定義 2.0.8 の書き込みツール esptool が使うほか、`build.sh` が書き込み後に起動するシリアルの常駐プロセスも使う）
 
 ```sh
 arduino-cli config add board_manager.additional_urls https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
 arduino-cli core update-index
-arduino-cli core install m5stack:esp32
+arduino-cli core install m5stack:esp32@2.0.8
 arduino-cli lib install WiFiManager
 pip3 install pyserial
 ```
@@ -50,9 +50,8 @@ pip3 install pyserial
 | arduino:avr（受信機） | 1.8.8 |
 | RF24（受信機） | 1.6.2 |
 
-`build.sh` の既定のボード ID は `m5stack:esp32:atom`（コア 2.0.x 向け）です。
-`arduino-cli core install` で入る新しいコア（3.x 以降）では ID が `m5stack:esp32:m5stack_atom` に変わっているので、
-その場合は `FQBN=m5stack:esp32:m5stack_atom ./build.sh` のように上書きしてください。
+`build.sh` の既定のボード ID は、2.0.8 での `m5stack:esp32:atom` です。
+3.x 以降のコアでは ID が `m5stack:esp32:m5stack_atom` に変わっているので、`FQBN=m5stack:esp32:m5stack_atom ./build.sh` のように上書きしてください。
 `arduino-cli board listall m5stack` で手元の正しい ID を確認できます。
 
 自分のリモコンの電波を採取する場合は、ほかに Arduino Uno と nRF24L01+ が要ります（「[自分のリモコンの電波を使うとき](#自分のリモコンの電波を使うとき)」を参照）。
@@ -178,7 +177,7 @@ arduino-cli lib install RF24
 ### 受信機を作る
 
 nRF24L01+ を Arduino Uno に次のように配線します。
-VCC と GND のあいだに 100µF のコンデンサを入れると受信が安定します。
+100µF のコンデンサは、nRF24L01+ の VCC と GND に並列に入れます（電源が安定し、受信が途切れにくくなります）。
 
 | nRF24L01+ | Uno |
 |---|---|
@@ -275,7 +274,7 @@ python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
 
 ## 仕組みと解析の記録
 
-電波の形式、暗号で保護されていることの確認、通し番号の受け付け条件などを調べた経緯は [research/README.md](research/README.md) にまとめています。
+電波の形式、署名が付与されていることの確認、通し番号の受け付け条件などを調べた経緯は [research/README.md](research/README.md) にまとめています。
 実験の一部は再検証していないので、参考として読んでください。
 
 ## ライセンス
