@@ -19,8 +19,9 @@ lucimo リモコン（VENTOTA Minoi CGY / LUC-RC-01）の電波を解析した�
 ## プロトコル
 
 リモコンは **BLEアドバタイズ**を 2402MHz(ch37) の1波だけで送出する（ch38/39には何も出ていない）。
-AA=0x8E89BED6 / ADV_NONCONN_IND / ランダムアドレス / AdvData = Manufacturer Specific Data
-（企業ID 0x5556、先頭4バイトは常に `F0 08 10 00`）。ホワイトニングもCRC-24もBLE標準。
+AA=0x8E89BED6 / ADV_NONCONN_IND / ランダムアドレス。ホワイトニングもCRC-24もBLE標準。
+AdvData は P と Q で異なる（下記）。P は Flags + Service Data（16bit UUID 0x08F0、`02 01 02 1B 16 F0 08 10 00` に続く22バイト）、
+Q は Manufacturer Specific Data（企業ID 0x5556、`1E FF 56 55` で始まる）。
 
 1押下で2種類のフレームが1:1で飛ぶ。
 - **P** … 命令の実体。**これだけ送れば動く**。先頭16バイト固定、以降が毎回変化
