@@ -1,0 +1,59 @@
+<!doctype html><meta charset=utf-8><title>lucimo 輝度センサ</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+body{background:#111;color:#eee;font:14px -apple-system,sans-serif;text-align:center;padding:16px}
+#wrap{position:relative;display:inline-block;touch-action:none}
+video{width:480px;max-width:90vw;border-radius:10px;display:block}
+#sel{position:absolute;border:2px solid #0a84ff;background:rgba(10,132,255,.15);pointer-events:none;display:none}
+#v{font-size:64px;font-variant-numeric:tabular-nums;margin:6px}
+#s,#hint{color:#888;font-size:12px}
+button{background:#2c2c2e;color:#eee;border:0;border-radius:8px;padding:8px 16px;font:inherit;margin:4px}
+</style>
+<h3>lucimo 輝度センサ</h3>
+<div id=wrap><video id=c autoplay muted playsinline></video><div id=sel></div></div>
+<div id=v>--</div>
+<p id=hint>照明の部分をドラッグで囲んでください（選択範囲だけを測ります）</p>
+<button onclick="clearSel()">全体に戻す</button>
+<p id=s>カメラを許可してください</p>
+<script>
+const vid=document.getElementById('c'), box=document.getElementById('sel'), wrap=document.getElementById('wrap');
+const cv=document.createElement('canvas'); cv.width=48; cv.height=36;
+const cx=cv.getContext('2d',{willReadFrequently:true});
+let roi=null;                                   // {x,y,w,h} 正規化(0..1)
+try{ roi=JSON.parse(localStorage.lucimoRoi||'null'); }catch(e){}
+function drawBox(){
+  if(!roi){ box.style.display='none'; return; }
+  const r=vid.getBoundingClientRect(), o=wrap.getBoundingClientRect();
+  box.style.display='block';
+  box.style.left=(r.left-o.left+roi.x*r.width)+'px';
+  box.style.top=(r.top-o.top+roi.y*r.height)+'px';
+  box.style.width=(roi.w*r.width)+'px'; box.style.height=(roi.h*r.height)+'px';
+}
+function clearSel(){ roi=null; localStorage.removeItem('lucimoRoi'); drawBox(); }
+let p0=null;
+wrap.addEventListener('pointerdown',e=>{ const r=vid.getBoundingClientRect();
+  p0=[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]; });
+wrap.addEventListener('pointermove',e=>{ if(!p0)return; const r=vid.getBoundingClientRect();
+  const p1=[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];
+  roi={x:Math.min(p0[0],p1[0]),y:Math.min(p0[1],p1[1]),
+       w:Math.abs(p1[0]-p0[0]),h:Math.abs(p1[1]-p0[1])}; drawBox(); });
+wrap.addEventListener('pointerup',()=>{ p0=null;
+  if(roi&&roi.w>0.02&&roi.h>0.02) localStorage.lucimoRoi=JSON.stringify(roi); else clearSel(); });
+addEventListener('resize',drawBox);
+
+navigator.mediaDevices.getUserMedia({video:{width:640,height:480}}).then(st=>{
+  vid.srcObject=st;
+  document.getElementById('s').textContent='計測中（このタブを閉じないでください）';
+  vid.addEventListener('loadedmetadata',drawBox);
+  setInterval(()=>{
+    const W=vid.videoWidth||640, H=vid.videoHeight||480;
+    const r=roi||{x:0,y:0,w:1,h:1};
+    cx.drawImage(vid, r.x*W, r.y*H, Math.max(1,r.w*W), Math.max(1,r.h*H), 0,0,48,36);
+    const d=cx.getImageData(0,0,48,36).data; let t=0;
+    for(let i=0;i<d.length;i+=4) t+=d[i]*.299+d[i+1]*.587+d[i+2]*.114;
+    const lux=+(t/(d.length/4)).toFixed(2);
+    document.getElementById('v').textContent=lux.toFixed(1);
+    fetch('/lux',{method:'POST',body:String(lux)}).catch(()=>{});
+  },100);
+}).catch(e=>document.getElementById('s').textContent='カメラを許可してください ('+e.name+')');
+</script>

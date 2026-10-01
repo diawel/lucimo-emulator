@@ -1,0 +1,12 @@
+#!/bin/sh
+# frames.json から frames.h を再生成してからビルド・書き込みする。
+# 手で compile すると古いフレーム表のまま焼けるので、必ずこれを使う。
+set -e
+cd "$(dirname "$0")"
+python3 genframes.py
+pgrep -f "daemon.py /dev/cu.usbserial" | xargs -r kill || true
+sleep 1
+arduino-cli compile --fqbn m5stack:esp32:atom lucimo_server | tail -1
+arduino-cli upload -p /dev/cu.usbserial-51522BCB3F --fqbn m5stack:esp32:atom lucimo_server | tail -1
+(cd esp && nohup python3 daemon.py /dev/cu.usbserial-51522BCB3F >/dev/null 2>&1 &)
+sleep 13

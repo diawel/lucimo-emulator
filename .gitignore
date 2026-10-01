@@ -1,0 +1,13 @@
+# ローカルデータ・ログ（採取ログや輝度ログは個人環境のもの）
+*.log
+*.fifo
+*.bak
+
+# 生成物（frames.json から genframes.py が作る）
+lucimo_server/frames.h
+
+# OS / Python
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.pyc
