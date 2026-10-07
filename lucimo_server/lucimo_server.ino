@@ -123,25 +123,36 @@ static void txStart(uint8_t ci) {
 }
 
 // ---- グローバル連番列の順送り再生（ローリングコード対応） ----
-// 照明は「後退・同一=拒否、前方のトークンを受理、約16秒アイドルで先頭から」。
-// 連番列(SEQ, カウンタ順。SEQCMD[i]=そのトークンの命令ID)を前にだけ進めて撃つ。
-// 見送り(busy)は設けない: 窓を超えた/巻き戻しのトークンは照明が静かに弾くだけで、
-// 押し続ければ再同期して回復する（実測: 沈黙では戻らず、送ると戻る。前方窓は約33）。
-static const uint32_t SEQ_IDLE = 16000;      // これだけ無送信が続けばポインタを先頭へ戻す
+// 照明は「後退・同一=拒否、前方のトークンを受理」。実測した2つの時間:
+//   - カウンタ再同期 約2.5秒: 直前の送信から2.5秒以上あくと、後退(先頭)トークンも受理する
+//   - リプレイ拒否 約11〜16秒: 同じトークンの再送はこの間弾かれる
+// 連番列(SEQ, カウンタ順。SEQCMD[i]=命令ID)を前にだけ進めて撃つ。前方が尽きたら先頭へ
+// 巻き戻すが、巻き戻しトークンが通る条件（先頭トークンがリプレイ拒否を抜け、かつ照明が
+// 再同期済み）が揃うまでは撃たずに待つ。空撃ちで照明の記憶を乱さないため。
+static const uint32_t REPLAY_MS = 16000;     // 同一トークンの再利用はこれだけ空ける（リプレイ拒否）
+static const uint32_t RESYNC_MS = 3500;      // 最後の送信からこれだけ空けば照明は再同期済み（実測~2.5s+余裕）
 static int seqPos = -1;                       // 直近に撃った連番位置。-1 = 未同期
-static uint32_t seqLast = 0;
+static uint32_t seqLast = 0;                   // 最後にSEQを撃った時刻
+static uint32_t seqUsed[NSEQ];                 // 各トークンを最後に撃った時刻（0=未使用）
 
-// 戻り値: 1=撃った / -1=このコマンドはSEQに無い(呼び元がtxStartへ)。見送り(0)は返さない。
+// 戻り値: 1=撃った / 0=見送り(巻き戻せる条件が未達、待つ) / -1=SEQに無い(呼び元がtxStartへ)
 static int seqPlay(uint8_t cmdId) {
-  if (millis() - seqLast > SEQ_IDLE) seqPos = -1;      // アイドル → 先頭から
-  // 前方の次の該当トークン、末尾まで無ければ先頭へ巻き戻し、常に撃つ（照明任せ）。
-  int sel = -1;
+  uint32_t now = millis();
+  int front = -1;                                        // このコマンドの先頭トークン
+  for (int i = 0; i < NSEQ; i++)
+    if (pgm_read_byte(&SEQCMD[i]) == cmdId) { front = i; break; }
+  if (front < 0) return -1;                              // SEQに無い → txStartへ
+
+  int sel = -1;                                          // 前方の次の該当トークン
   for (int i = seqPos + 1; i < NSEQ && sel < 0; i++)
-    if (pgm_read_byte(&SEQCMD[i]) == cmdId) sel = i;    // 窓を無視して前方の次
-  if (sel < 0)
-    for (int i = 0; i < NSEQ && sel < 0; i++)
-      if (pgm_read_byte(&SEQCMD[i]) == cmdId) sel = i;  // 無ければ先頭から（巻き戻し）
-  if (sel < 0) return -1;                               // そもそもSEQに無い → txStartへ
+    if (pgm_read_byte(&SEQCMD[i]) == cmdId) sel = i;
+  if (sel < 0) {                                         // 前方が尽きた → 巻き戻しを検討
+    bool rested   = (seqUsed[front] == 0) || (now - seqUsed[front] >= REPLAY_MS);  // 先頭が16s以上前
+    bool resynced = (now - seqLast >= RESYNC_MS);                                   // 最後の送信が3.5s以上前
+    if (rested && resynced) sel = front;                // 両方満たせば巻き戻して撃つ
+    else return 0;                                       // 揃うまで撃たずに待つ
+  }
+
   txBusy = 0;
   uint8_t addr[6], data[31];
   memcpy_P(addr, SEQ[sel].addr, 6);
@@ -151,7 +162,7 @@ static int seqPlay(uint8_t cmdId) {
   uint8_t d[32]; d[0] = 31; memcpy(d + 1, data, 31);
   advEnable(hci(0x2008, d, 32));
   txUntil = millis() + 8000;
-  seqPos = sel; seqLast = millis();
+  seqPos = sel; seqLast = now; seqUsed[sel] = now ? now : 1;
   return 1;
 }
 
