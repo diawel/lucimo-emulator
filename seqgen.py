@@ -1,11 +1,11 @@
-"""WATCH の出力から、全ボタンを決めた順で1周×数周押したログを SEQ_ALL にする。
-  python3 seqgen.py <WATCHログ> <ボタン名1> <ボタン名2> ... <ボタン名n>
+"""M5Atom Lite の採取ログから、全ボタンを決めた順で1周×数周押したログを SEQ_ALL にする。
+  python3 seqgen.py <採取ログ> <ボタン名1> <ボタン名2> ... <ボタン名n>
 周の間を2.5秒以上空けて押すこと（そこで周を区切る）。連続してちょうどn個そろった
 周のまとまりだけを、押した順のまま SEQ_ALL にする（照明の通し番号を連続させるため）。
 採り方は README「SEQ_ALL を採る」を参照。"""
-import json, re, sys, lucimo
+import sys, lucimo
 
-GAP = 25   # 2.5秒（WATCHの時刻は0.1秒単位）。これ以上空けば次の周とみなす
+GAP = 25   # 2.5秒（採取ログの時刻は0.1秒単位）。これ以上空けば次の周とみなす
 
 
 def split_rounds(times, gap=GAP):
@@ -35,17 +35,10 @@ def longest_good_run(rounds, n):
 
 def main():
     if len(sys.argv) < 3:
-        sys.exit("使い方: python3 seqgen.py <WATCHログ> <ボタン名1> ... <ボタン名n>")
+        sys.exit("使い方: python3 seqgen.py <採取ログ> <ボタン名1> ... <ボタン名n>")
     log, names = sys.argv[1], sys.argv[2:]
     n = len(names)
-    rows = [(int(m.group(1)), m.group(2).strip())
-            for m in (re.match(r'^(\d+) ((?:[0-9A-F]{2} ){24,})', l) for l in open(log)) if m]
-    good = []
-    for t, h in rows:
-        try:
-            good.append((t, lucimo.check(h)))     # CRCが通るPフレームだけ
-        except ValueError:
-            pass
+    good = lucimo.read_capture(log)
     rounds = split_rounds([t for t, _ in good])
     print(f"受信した有効フレーム {len(good)} / 検出した周 {len(rounds)}（各 {[len(r) for r in rounds]} 個）")
     run = longest_good_run(rounds, n)

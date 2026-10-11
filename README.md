@@ -47,14 +47,12 @@ pip3 install pyserial
 |---|---|
 | m5stack:esp32 | 2.0.8 |
 | WiFiManager | 2.0.17 |
-| arduino:avr（受信機） | 1.8.8 |
-| RF24（受信機） | 1.6.2 |
 
 `build.sh` の既定のボード ID は、2.0.8 での `m5stack:esp32:atom` です。
 3.x 以降のコアでは ID が `m5stack:esp32:m5stack_atom` に変わっているので、`FQBN=m5stack:esp32:m5stack_atom ./build.sh` のように上書きしてください。
 `arduino-cli board listall m5stack` で手元の正しい ID を確認できます。
 
-自分のリモコンの電波を採取する場合は、ほかに Arduino Uno と nRF24L01+ が要ります（「[自分のリモコンの電波を使うとき](#自分のリモコンの電波を使うとき)」を参照）。
+自分のリモコンの電波も、同じ M5Atom Lite で採取できます（「[自分のリモコンの電波を使うとき](#自分のリモコンの電波を使うとき)」を参照）。
 
 ## セットアップ
 
@@ -136,10 +134,8 @@ ON と OFF を素早く繰り返すような使い方では、2回目以降が�
 通し番号が連続している必要があるので、**ひと続きの受信で**、周の区切りだけ少し長め（3秒ほど）に空けて押します。
 
 ```sh
-python3 ard/send.py 'REINIT
-ADDR 01E10FCF62
-WATCH 240
-' 246 > /tmp/seq.txt
+python3 esp/send.py S 240 > /tmp/seq.txt
+python3 esp/send.py X 1 >> /tmp/seq.txt
 ```
 
 受信しているあいだに、次の21ボタンをこの順で1周、周の間を3秒ほど空けて、数周くりかえします。
@@ -170,57 +166,19 @@ python3 seqgen.py /tmp/seq.txt \
 
 同梱の電波ではなく、手元のリモコンの電波を使うこともできます。
 照明のペアリングを変えずに済むほか、同梱の電波でペアリングできなかったときの代わりの手段になります。
-採取には Arduino Uno、nRF24L01+、100µF のコンデンサ、RF24 ライブラリ（TMRh20）を使います。
-
-```sh
-arduino-cli core install arduino:avr
-arduino-cli lib install RF24
-```
-
-### 受信機を作る
-
-nRF24L01+ を Arduino Uno に次のように配線します。
-作者の受信機では、100µF のコンデンサを nRF24L01+ の VCC と GND に並列に入れています。
-nRF24L01+ では一般に推奨される部品で、受信だけなら無くても動く可能性がありますが、試していません。
-
-| nRF24L01+ | Uno |
-|---|---|
-| CE | D9 |
-| CSN | D10 |
-| SCK | D13 |
-| MOSI | D11 |
-| MISO | D12 |
-| VCC | 3.3V |
-| GND | GND |
-
-受信用のスケッチを書き込み、シリアルを開きっぱなしにする常駐プロセスを起動します。
-ポートを開き直すと Uno がリセットされるので、以後のコマンドはこの常駐プロセス経由で送ります。
-
-```sh
-arduino-cli compile --fqbn arduino:avr:uno lucimo_sniff6
-arduino-cli upload -p /dev/cu.usbmodem101 --fqbn arduino:avr:uno lucimo_sniff6
-python3 ard/daemon.py /dev/cu.usbmodem101 &
-```
-
-`/dev/cu.usbmodem101` は自分の環境のポート名に置き換えてください（`arduino-cli board list` で確認できます）。
+採取には、送信に使う M5Atom Lite をそのまま使います。ほかの機材は要りません。
 
 ### 電波を採取する
 
-同梱の `frames.json` は作者のリモコンのものなので、先に空にしておきます。
-残しておくと、採取しなかったボタンや連打用の列（後述の `SEQ_ALL`）に作者のリモコンの電波が使われます。
+`build.sh` で書き込むと、M5Atom Lite のシリアルを開きっぱなしにする常駐プロセス（`esp/daemon.py`）が起動します。
+採取のコマンドは、この常駐プロセス経由で送ります。
 
-```sh
-echo '{}' > frames.json
-```
-
-受信を始めます。
 次のコマンドは180秒間受信し、拾った電波を `/tmp/h.txt` に保存します。
+`S` で受信を始め、`X` で止めます。
 
 ```sh
-python3 ard/send.py 'REINIT
-ADDR 01E10FCF62
-WATCH 180
-' 186 > /tmp/h.txt
+python3 esp/send.py S 180 > /tmp/h.txt
+python3 esp/send.py X 1 >> /tmp/h.txt
 ```
 
 受信しているあいだに、リモコンのボタンを押します。
@@ -228,7 +186,15 @@ WATCH 180
 ボタンを変えるときだけ、5秒以上あけてください（`harvest.py` はこの間隔でボタンを区切ります）。
 1回の受信で全ボタンを押しきれないときは、何回かに分けて採取します。
 
-受信が終わったら、押した順にボタン名を並べて取り込みます。
+同梱の `frames.json` は作者のリモコンのものなので、取り込む前に空にしておきます。
+残しておくと、採取しなかったボタンや連打用の列（`SEQ_ALL`）に作者のリモコンの電波が使われます。
+何回かに分けて採取するときは、最初の1回の前にだけ空にします。
+
+```sh
+echo '{}' > frames.json
+```
+
+押した順にボタン名を並べて取り込みます。
 
 ```sh
 python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
@@ -240,41 +206,29 @@ python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
 
 取り込んだら、「[M5Atom Lite に書き込む](#1-m5atom-lite-に書き込む)」の手順で書き込み直します。
 
-### 採取できないとき
-
-`ADDR 01E10FCF62` は作者のリモコンが送る電波の先頭部分で、受信機はこれを目印に電波を拾います。
-リモコンの個体ごとに値が違う場合、`WATCH` は何も拾いません。
-そのときは、受信機を BLE のアクセスアドレス（`8E89BED6`）に同期させてチャンネル2で受信し、自分のリモコンの値を調べる必要があります。
-受信機のコマンドは `lucimo_sniff6/lucimo_sniff6.ino` の冒頭に、電波の形式は[解析の記録](research/README.md)にあります。
-見つけた値は採取コマンドの `ADDR` と、`lucimo.py` の `PHDR`（フレームの先頭16バイト）の両方に反映します。
+採取ログの各行は `<時刻(0.1秒単位)> ADV <アドレス> <アドバタイズデータ>` の形式です。
+照明が反応する方の電波（Service Data、UUID 0x08F0）だけを、押すたびに1行ずつ出します。
+何も出ないときは、M5Atom Lite がリモコンの近くにあるか、`build.sh` で書き込み直したかを確かめてください。
 
 ## うまく動かないとき
 
 - **照明が反応しない**：まず照明が M5Atom Lite とペアリングされているかを確かめてください。ペアリング済みなら、`build.sh` を使わずに書き込んだせいで古いフレーム表のまま焼かれている可能性があります。`build.sh` で書き込み直してください。
-- **WATCH が何も拾わない**：nRF24L01+ がときどき応答しなくなります。採取コマンドの先頭に `REINIT` を入れているのはこのためです。状態は次のコマンドで確かめられ、`connected=0` なら受信機が応答していません。
-
-  ```sh
-  python3 ard/send.py 'DIAG
-  ' 1
-  ```
-
 - **`lucimo.local` が開けない**：mDNS に対応していない端末やネットワークでは、M5Atom Lite のシリアル出力（起動時に `READY http://<IPアドレス>/` と出ます）にある IP アドレスで開いてください。
 
 ## ファイル構成
 
 | パス | 内容 |
 |---|---|
-| `lucimo_server/` | M5Atom Lite のファーム（Web リモコン、HTTP API、本体ボタン） |
-| `lucimo_sniff6/` | Arduino Uno + nRF24L01+ の受信機 |
-| `ard/`、`esp/` | 各ボードのシリアルを開きっぱなしにする常駐プロセスと、そこへコマンドを送るスクリプト |
+| `lucimo_server/` | M5Atom Lite のファーム（Web リモコン、HTTP API、本体ボタン、電波の採取） |
+| `esp/` | M5Atom Lite のシリアルを開きっぱなしにする常駐プロセスと、そこへコマンドを送るスクリプト |
 | `harvest.py` | 採取ログをボタンごとに振り分けて `frames.json` に取り込む |
 | `seqgen.py` | 全ボタン1周×数周の採取ログから連打用の列 `SEQ_ALL` を作る |
 | `genframes.py` | `frames.json` から `lucimo_server/frames.h` を作る（`build.sh` が呼ぶ） |
-| `lucimo.py` | フレームの CRC 検証と `frames.json` の読み書き。`python3 lucimo.py list` で登録内容を表示する |
+| `lucimo.py` | 採取ログの読み込みと `frames.json` の読み書き。`python3 lucimo.py list` で登録内容を表示する |
 | `clone.py` | ホワイトニングの計算（`lucimo.py` と `genframes.py` が読み込む） |
 | `frames.json` | 採取したトークン |
 | `build.sh` | `frames.h` を作ってから M5Atom Lite に書き込む |
-| `research/` | 電波の解析の記録と、解析にだけ使ったツール |
+| `research/` | 電波の解析の記録と、解析にだけ使ったツール（Arduino Uno + nRF24L01+ の受信機を含む） |
 
 ## 仕組みと解析の記録
 
@@ -285,5 +239,5 @@ python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
 
 [MIT](LICENSE) です。
 
-受信機（`lucimo_sniff6`）が使う RF24 ライブラリは GPL-2.0 です。
+解析に使った受信機（`research/lucimo_sniff6`）が使う RF24 ライブラリは GPL-2.0 です。
 受信機をビルドしたバイナリを配る場合は、そのバイナリに GPL-2.0 の条件が適用されます。

@@ -1,11 +1,10 @@
-"""WATCH の出力を、押下の時間間隔でボタンごとに振り分けて frames.json に取り込む。
+"""M5Atom Lite の採取ログを、押下の時間間隔でボタンごとに振り分けて frames.json に取り込む。
   python3 harvest.py <採取ログ> <ボタン名1> <ボタン名2> ...
 ボタンを変えるときに5秒以上あけて押すこと（そこで区切る）。"""
-import json, re, sys, lucimo
-GAP = 40                        # 4.0秒（WATCH の時刻は0.1秒単位）
+import sys, lucimo
+GAP = 40                        # 4.0秒（採取ログの時刻は0.1秒単位）
 log, names = sys.argv[1], sys.argv[2:]
-rows = [(int(m.group(1)), m.group(2).strip())
-        for m in (re.match(r'^(\d+) ((?:[0-9A-F]{2} ){24,})', l) for l in open(log)) if m]
+rows = lucimo.read_capture(log)
 groups, cur = [], []
 for i, (t, h) in enumerate(rows):
     if cur and t - rows[i-1][0] > GAP: groups.append(cur); cur = []
@@ -17,10 +16,6 @@ if len(groups) != len(names):
     sys.exit(1)
 db = lucimo.load()
 for name, g in zip(names, groups):
-    good = []
-    for h in g:
-        try: good.append(lucimo.check(h))
-        except ValueError: pass
-    db[name] = good
-    print(f"  {name}: {len(good)}/{len(g)} 個（CRC検証済み）")
+    db[name] = g
+    print(f"  {name}: {len(g)} 個")
 lucimo.save(db)

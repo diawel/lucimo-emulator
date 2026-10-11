@@ -2,6 +2,7 @@
 //   - 初回は AP "lucimo-setup" が立つので、スマホから繋いでWiFiを設定する
 //   - 以後 http://lucimo.local/ でリモコンのWebページが開く
 //   - HTTP API: GET /cmd?k=ON  （keyは / のページ or /list 参照）
+//   - シリアルに S を送るとリモコンの電波の採取を始め、X で止める（README「電波を採取する」）
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <WebServer.h>
@@ -27,10 +28,29 @@ static void ledNext(bool nextIsOn) { if (nextIsOn) led(0, 24, 0); else led(24, 0
 static volatile uint16_t doneOp = 0;
 static volatile uint8_t  doneSt = 0;
 static void ctrlReady() {}
+// ---- 採取: リモコンのアドバタイズを受けてシリアルに出す（S=開始 / X=停止） ----
+// 照明が反応するのは Service Data(UUID 0x08F0) の方なので、それだけを拾う。
+// 1押下で UUID の後ろが 10 00 のものと 11 00 のものが交互に届く。送り返して動くと
+// 確かめているのは 10 00 の方なので、そちらだけを残す。
+struct Cap { uint32_t t; uint8_t a[6], d[31]; };
+static Cap capQ[16];
+static volatile uint8_t capW = 0, capR = 0;
+static void capPush(const uint8_t *r, uint16_t l) {  // r = LE Advertising Report の1件目
+  if (l < 9) return;
+  uint8_t n = r[8];                                  // r: 種別,アドレス型,アドレス6,長さ,データ
+  const uint8_t *dt = r + 9;                         // データ: 02 01 02 1B 16 F0 08 ...
+  if (n != 31 || l < 9u + n || dt[5] != 0xF0 || dt[6] != 0x08 || dt[7] != 0x10 || dt[8] != 0x00) return;
+  Cap &c = capQ[capW % 16];
+  c.t = millis(); memcpy(c.a, r + 2, 6); memcpy(c.d, dt, 31);
+  capW++;
+}
+
 static int ctrlRecv(uint8_t *d, uint16_t l) {
   if (l >= 7 && d[0] == 0x04 && d[1] == 0x0E) {      // Command Complete
     doneOp = d[4] | (d[5] << 8); doneSt = d[6];
   }
+  if (l >= 5 && d[0] == 0x04 && d[1] == 0x3E && d[3] == 0x02 && d[4] >= 1)  // LE Advertising Report
+    capPush(d + 5, l - 5);
   return 0;
 }
 static esp_vhci_host_callback_t vhciCb = { ctrlReady, ctrlRecv };
@@ -359,7 +379,42 @@ static void pollButton() {
   }
 }
 
+// 1押下で同じアドバタイズが数十発届くので、直前と違うものだけを出す。
+// 形式: <時刻(0.1秒単位)> ADV <アドレス 送出順> <AdvData 31バイト>
+static void capPoll() {
+  static uint8_t last[31];
+  while (capR != capW) {
+    Cap c = capQ[capR % 16]; capR++;
+    if (!memcmp(c.d, last, 31)) continue;
+    memcpy(last, c.d, 31);
+    Serial.printf("%lu ADV ", c.t / 100);
+    for (int i = 0; i < 6; i++) Serial.printf("%02X", c.a[i]);
+    Serial.print(' ');
+    for (int i = 0; i < 31; i++) Serial.printf("%02X", c.d[i]);
+    Serial.println();
+  }
+}
+
+static void capCmd(char c) {
+  if (c == 'S') {
+    txStop();
+    uint8_t m[8] = { 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x3F };  // LE Meta イベントは既定で無効なので有効にする
+    hci(0x0C01, m, 8);
+    uint8_t p[7] = { 0x00, 0x10,0x00, 0x10,0x00, 0x00, 0x00 };  // パッシブ、間隔=窓=10ms
+    uint8_t e[2] = { 0x01, 0x00 };                              // 開始、重複を省かない
+    bool ok = hci(0x200B, p, 7) && hci(0x200C, e, 2);
+    Serial.printf("CAPTURE-START %d\n", ok);
+  } else if (c == 'X') {
+    uint8_t e[2] = { 0x00, 0x00 };
+    hci(0x200C, e, 2);
+    capPoll();
+    Serial.println("CAPTURE-END");
+  }
+}
+
 void loop() {
+  if (Serial.available()) capCmd(Serial.read());
+  capPoll();
   pollButton();
   web.handleClient();
   if (txUntil && millis() > txUntil) txStop();
