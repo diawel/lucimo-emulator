@@ -13,7 +13,7 @@
 
 WebServer web(80);
 static const uint8_t BTN = 39;   // M5Atom Lite 本体ボタン（押下でLOW）
-static uint32_t btnMinMs = 250;  // 本体ボタンの最低送信時間（/btnms で変更可）
+static uint32_t btnMinMs = 80;  // 本体ボタンの最低送信時間（/btnms で変更可）
 static const uint8_t LED = 27;   // M5Atom Lite のRGB LED（SK6812）
 
 // 次に送る命令をLEDで示す: 緑=次はON / 赤=次はOFF / 青=送信中
@@ -215,9 +215,7 @@ hr{border:0;border-top:1px solid #38383a;margin:18px 0}
  <button data-k="G3_OFF">③切</button><button data-k="G4_OFF">④切</button>
 </div>
 <div id=t></div><script>
-// 段階命令(明るく/暗く/白色/暖色)は押した時間がそのまま段数になるので最短を短く。
-// 単発命令は段階が無いので長めに撃つ - OFF直後のONは短いと取りこぼされる。
-const ONCE_MIN=250;   // 実測: 送信200msで10/10、120ms以下は崩れる
+const ONCE_MIN=80;   // 1タップの送信時間（ms）
 let t0=0,cur=null,step=0,busy=0,lastOnce=0;
 function down(b,e){ e.preventDefault(); if(cur||busy)return;
   cur=b.dataset.k; step=b.hasAttribute('data-step'); t0=Date.now();
@@ -275,7 +273,7 @@ void setup() {
   web.on("/cmd", []{
     int i = findCmd(web.arg("k"));
     if (i < 0) { web.send(404, "text/plain", "unknown"); return; }
-    uint16_t ms = web.arg("ms").toInt(); if (!ms) ms = 250;
+    uint16_t ms = web.arg("ms").toInt(); if (!ms) ms = 80;
     web.send(200, "text/plain", "ok");     // 先に応答。ブラウザを待たせない（見送りは /busy で分かる）
     if (!web.hasArg("t")) {                 // 連番列で順送り再生（検証用の &t 指定時は従来路）
       int r = seqPlay(i);
