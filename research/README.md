@@ -154,7 +154,19 @@ UI・本体ボタンとも **80ms・無音なし** に統一（`ONCE_MIN` / `btn
 
 ## 構成
 
-送信は M5Atom Lite (lucimo_server/, /dev/cu.usbserial-51522BCB3F)、
-採取は Arduino Uno + nRF24L01+ (lucimo_sniff6/, /dev/cu.usbmodem101)。
-どちらも esp/daemon.py・ard/daemon.py でポートを開きっぱなしにしてから使う
-（開き直すとボードがリセットされる）。
+送信も採取も M5Atom Lite (lucimo_server/, /dev/cu.usbserial-51522BCB3F) で行う。
+esp/daemon.py でポートを開きっぱなしにしてから使う（開き直すとボードがリセットされる）。
+
+2026-10-12 までの採取と解析は Arduino Uno + nRF24L01+ (research/lucimo_sniff6/, research/ard/,
+/dev/cu.usbmodem101) で行っていた。上の記録の WATCH・REINIT・DIAG・ADDR はこの受信機のコマンド。
+電波が普通のBLEアドバタイズだと分かったので、M5Atom Lite のBLEで受信する方式に置き換えた。
+
+- 採取はシリアルに `S`（開始）/`X`（停止）。生HCIでパッシブスキャン（間隔=窓=10ms、重複を省かない）し、
+  Service Data(UUID 0x08F0) の行を `<時刻0.1秒> ADV <AdvA> <AdvData31>` で出す。`lucimo.from_adv()` が
+  従来の frame[0..37] 形式に直すので、frames.json と genframes.py はそのまま使える
+- HCI Reset 後は LE Meta イベントが無効。Set Event Mask(0x0C01) で bit61 を立てないと
+  Advertising Report が1件も届かない
+- 1押下で、UUID の後ろが `10 00` のものと `11 00` のものが交互に届く（末尾2バイトも違う）。
+  nRF24 の採取は `10 00` 側の先頭を同期語にしていたので、`11 00` 側は今回初めて見えた。
+  送り返して動くと確かめているのは `10 00` 側なので、採取はそちらだけを残す。`11 00` 側の役割は未調査
+- macOS の CoreBluetooth でも受信できるが、送信元アドレスを隠すので採取には使えない

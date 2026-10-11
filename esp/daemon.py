@@ -1,6 +1,6 @@
-# Arduinoのシリアルを開きっぱなしにして、FIFO経由でコマンドを流し、
+# ボードのシリアルを開きっぱなしにして、FIFO経由でコマンドを流し、
 # 出力を全部ログに落とす常駐プロセス。
-# ポートを開き続けることで、コマンドの合間にUnoがリセットされるのを防ぐ。
+# ポートを開き直すとボードがリセットされるので、開き続けてコマンドを流す。
 import serial, os, select, sys, time
 
 PORT = sys.argv[1] if len(sys.argv) > 1 else '/dev/cu.usbmodem101'
