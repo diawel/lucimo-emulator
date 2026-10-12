@@ -99,8 +99,6 @@ PORT=/dev/cu.usbserial-XXXXXXXXXX ./build.sh
 | `POST /btnms?v=<ミリ秒>` | 本体ボタンの最低送信時間を変える（既定 80） |
 | `POST /wifioff` | Wi-Fi を止める。以後は本体ボタンだけで操作でき、電源を入れ直すと戻る |
 
-操作系は POST のみ受け付けます（URL を開いただけで動かないように）。iOS ショートカットでは「URLの内容を取得」の方法を POST にしてください。
-
 ### ボタン名
 
 | ボタン名 | リモコンの表示 |
