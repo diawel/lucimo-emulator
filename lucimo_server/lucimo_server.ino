@@ -1,7 +1,7 @@
 // lucimo 照明リモコン: M5Atom Lite を仮想リモコン化する
 //   - 初回は AP "lucimo-setup" が立つので、スマホから繋いでWiFiを設定する
 //   - 以後 http://lucimo.local/ でリモコンのWebページが開く
-//   - HTTP API: GET /cmd?k=ON  （keyは / のページ or /list 参照）
+//   - HTTP API: POST /cmd?k=ON  （keyは / のページ or /list 参照）
 //   - シリアルに S を送るとリモコンの電波の採取を始め、X で止める（README「電波を採取する」）
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -246,7 +246,7 @@ async function up(e){ if(!cur)return; if(e)e.preventDefault();
   // 実機は長押し中0.2秒ごとに新トークンを作るが、採取済みトークンでは追随できない
   // （長押し1秒で5個消費してしまう）。よって 1タップ = 1段階 に統一する。
   try{
-    await fetch(`/cmd?k=${k}&ms=${ONCE_MIN}`);
+    await fetch(`/cmd?k=${k}&ms=${ONCE_MIN}`,{method:"POST"});
     const w=+(await (await fetch('/busy')).text());   // 見送られていたら残り時間が返る
     if(w>0) toast(`${k} あと${Math.ceil(w/1000)}秒`);
   }catch(e){ toast('送信できません'); }
@@ -282,15 +282,15 @@ void setup() {
   MDNS.begin("lucimo");
 
   web.on("/", []{ web.send_P(200, "text/html; charset=utf-8", PAGE); });
-  web.on("/down", []{                       // 押している間だけ送る（段階ボタン用）
+  web.on("/down", HTTP_POST, []{                       // 押している間だけ送る（段階ボタン用）
     int i = findCmd(web.arg("k"));
     if (i < 0) { web.send(404, "text/plain", "unknown"); return; }
     txStart(i);                             // 離すまで送り続ける
     lastAct = millis();
     web.send(200, "text/plain", "ok");
   });
-  web.on("/up", []{ txStop(); web.send(200, "text/plain", "ok"); });
-  web.on("/cmd", []{
+  web.on("/up", HTTP_POST, []{ txStop(); web.send(200, "text/plain", "ok"); });
+  web.on("/cmd", HTTP_POST, []{
     int i = findCmd(web.arg("k"));
     if (i < 0) { web.send(404, "text/plain", "unknown"); return; }
     uint16_t ms = web.arg("ms").toInt(); if (!ms) ms = 80;
@@ -305,13 +305,13 @@ void setup() {
     if (txBusy) return;                   // 見送り。応答は送信済み
     lastAct = millis(); delay(ms); txStop();
   });
-  web.on("/wifioff", []{                    // WiFiを完全に止める（復帰は電源再投入）
+  web.on("/wifioff", HTTP_POST, []{                    // WiFiを完全に止める（復帰は電源再投入）
     web.send(200, "text/plain", "wifi off");
     delay(200);
     WiFi.disconnect(true); WiFi.mode(WIFI_OFF);
     Serial.println("WiFi停止。以後は本体ボタンのみ");
   });
-  web.on("/raw", []{                        // /raw?d=<AdvData 31バイトのhex 62文字>
+  web.on("/raw", HTTP_POST, []{                        // /raw?d=<AdvData 31バイトのhex 62文字>
     String h = web.arg("d");
     if (h.length() != 62) { web.send(400, "text/plain", "need 62 hex"); return; }
     uint8_t d[31];
@@ -322,7 +322,7 @@ void setup() {
     txRaw(d); delay(ms); txStop();
   });
   web.on("/busy", []{ web.send(200, "text/plain", String(txBusy)); });
-  web.on("/btnms", []{                      // 本体ボタンの最低送信時間を変える
+  web.on("/btnms", HTTP_POST, []{                      // 本体ボタンの最低送信時間を変える
     if (web.hasArg("v")) btnMinMs = web.arg("v").toInt();
     web.send(200, "text/plain", String(btnMinMs));
   });
