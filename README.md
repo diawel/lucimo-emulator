@@ -213,7 +213,7 @@ python3 harvest.py /tmp/h.txt ON OFF FAV1 FAV2 COLOR BRIGHTNESS
 ## うまく動かないとき
 
 - **照明が反応しない**：まず照明が M5Atom Lite とペアリングされているかを確かめてください。ペアリング済みなら、`build.sh` を使わずに書き込んだせいで古いフレーム表のまま焼かれている可能性があります。`build.sh` で書き込み直してください。
-- **`lucimo.local` が開けない**：mDNS に対応していない端末やネットワークでは、M5Atom Lite のシリアル出力（起動時に `READY http://<IPアドレス>/` と出ます）にある IP アドレスで開いてください。
+- **`lucimo.local` が開けない**：mDNS に対応していない端末やネットワークでは、M5Atom Lite のシリアル出力（起動時に `READY http://<IPアドレス>/` と出ます）にある IP アドレスで開いてください。Android 11 のタブレットの Chrome では `lucimo.local` が引けず（`DNS_PROBE_FINISHED_NXDOMAIN`）、IP アドレスなら開けました（2026-11-19）。
 
 ## ファイル構成
 
